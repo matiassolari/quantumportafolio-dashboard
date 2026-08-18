@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analizador de Portafolios Cuantitativo - Markowitz & CAPM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+    <style>
+        .loader {
+            border-top-color: #10B981;
+            -webkit-animation: spinner 1.5s linear infinite;
+            animation: spinner 1.5s linear infinite;
+        }
+        @-webkit-keyframes spinner {
+            0% { -webkit-transform: rotate(0deg); }
+            100% { -webkit-transform: rotate(360deg); }
+        }
+        @keyframes spinner {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen font-sans">
+
+    <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <span class="text-emerald-500 text-3xl font-bold">📊</span>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight text-white">QuantumPort</h1>
+                    <p class="text-xs text-slate-400">Optimización de Portafolios en Tiempo Real (Markowitz & SML)</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="inline-flex items-center rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-400 ring-1 ring-inset ring-emerald-500/20">
+                    Netlify Serverless
+                </span>
+                <span class="inline-flex items-center rounded-full bg-blue-500/10 px-2.5 py-0.5 text-xs font-medium text-blue-400 ring-1 ring-inset ring-emerald-500/20">
+                    yfinance API
+                </span>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8">
+        <section class="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 mb-8 backdrop-blur shadow-xl">
+            <h2 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                ⚙️ Configuración del Pipeline de Optimización
+            </h2>
+            <form id="configForm" class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Activos (Tickers)</label>
+                    <input type="text" id="tickersInput" value="AAPL, MSFT, GOOGL, AMZN" 
+                           class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition">
+                    <span class="text-[10px] text-slate-500 mt-1 block">Separados por comas</span>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Benchmark de Mercado</label>
+                    <input type="text" id="benchmarkInput" value="SPY" 
+                           class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition">
+                    <span class="text-[10px] text-slate-500 mt-1 block">Índice de referencia (CAPM)</span>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Periodo Histórico</label>
+                    <select id="periodInput" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition">
+                        <option value="1y">1 Año</option>
+                        <option value="3y" selected>3 Años (Recomendado)</option>
+                        <option value="5y">5 Años</option>
+                    </select>
+                    <span class="text-[10px] text-slate-500 mt-1 block">Horizonte temporal para estadísticas</span>
+                </div>
+                <div class="flex items-end">
+                    <button type="submit" id="btnCalcular" 
+                            class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 px-6 rounded-xl transition duration-150 transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-emerald-900/20 flex items-center justify-center gap-2">
+                        🚀 Optimizar Portafolio
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <div id="loadingIndicator" class="hidden flex-col items-center justify-center py-16 gap-4">
+            <div class="loader ease-linear rounded-full border-4 border-t-4 border-slate-800 h-14 w-14"></div>
+            <p class="text-sm text-slate-400 font-medium animate-pulse">
+                Descargando datos históricos mediante yfinance y resolviendo la frontera de Markowitz...
+            </p>
+        </div>
+
+        <div id="errorAlert" class="hidden bg-red-900/20 border border-red-500/30 rounded-xl p-4 mb-8 text-red-300 text-sm flex items-center gap-3">
+            <span class="text-lg">⚠️</span>
+            <span id="errorMessage"></span>
+        </div>
+
+        <div id="resultsDashboard" class="hidden space-y-8">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="bg-slate-800/30 border border-slate-700/30 rounded-2xl p-5 flex items-center justify-between shadow-lg">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Risk-Free Rate (10Y Yield)</p>
+                        <h3 class="text-2xl font-bold text-white" id="rfValue">- %</h3>
+                        <p class="text-[10px] text-slate-500 mt-1">Sincronizado vía Bono del Tesoro ^TNX</p>
+                    </div>
+                    <span class="text-3xl">🛡️</span>
+                </div>
+                <div class="bg-gradient-to-br from-emerald-950/20 to-slate-800/30 border border-emerald-500/20 rounded-2xl p-5 flex items-center justify-between shadow-lg">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-emerald-400 mb-1">PRO (Max Sharpe)</p>
+                        <h3 class="text-2xl font-bold text-emerald-400" id="proSharpe">-</h3>
+                        <p class="text-[10px] text-slate-400 mt-1" id="proStats">Retorno: - | Volatilidad: -</p>
+                    </div>
+                    <span class="text-3xl text-emerald-400">⭐</span>
+                </div>
+                <div class="bg-gradient-to-br from-blue-950/20 to-slate-800/30 border border-blue-500/20 rounded-2xl p-5 flex items-center justify-between shadow-lg">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-blue-400 mb-1">MVG (Mínima Varianza)</p>
+                        <h3 class="text-2xl font-bold text-blue-400" id="mvgVol">- %</h3>
+                        <p class="text-[10px] text-slate-400 mt-1" id="mvgStats">Retorno: - | Sharpe: -</p>
+                    </div>
+                    <span class="text-3xl text-blue-400">🛡️</span>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div class="bg-slate-800/40 border border-slate-700/40 rounded-2xl p-6 shadow-xl">
+                    <h3 class="text-md font-semibold text-white mb-1 flex items-center gap-2">
+                        📈 Frontera Eficiente de Markowitz
+                    </h3>
+                    <p class="text-xs text-slate-400 mb-4">Relación óptima entre rentabilidad esperada y riesgo total (Volatilidad anualizada).</p>
+                    <div id="chartFrontera" class="w-full h-[400px]"></div>
+                </div>
+
+                <div class="bg-slate-800/40 border border-slate-700/40 rounded-2xl p-6 shadow-xl">
+                    <h3 class="text-md font-semibold text-white mb-1 flex items-center gap-2">
+                        📊 Security Market Line (SML) / CAPM
+                    </h3>
+                    <p class="text-xs text-slate-400 mb-4">Valoración de activos financieros en base al riesgo sistemático (Beta de la cartera/activo).</p>
+                    <div id="chartSML" class="w-full h-[400px]"></div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div class="bg-slate-800/40 border border-slate-700/40 rounded-2xl p-6 shadow-xl">
+                    <h3 class="text-md font-semibold text-white mb-4 flex items-center gap-2">
+                        ⚖️ Asignación de Capital (Pesos Óptimos)
+                    </h3>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-slate-700 text-left text-sm">
+                            <thead>
+                                <tr class="text-slate-400 uppercase text-xs font-semibold tracking-wider">
+                                    <th class="py-3 px-4">Activo</th>
+                                    <th class="py-3 px-4 text-emerald-400">Peso PRO (Max Sharpe)</th>
+                                    <th class="py-3 px-4 text-blue-400">Peso MVG (Min Var)</th>
+                                    <th class="py-3 px-4">Beta</th>
+                                    <th class="py-3 px-4">Retorno Esperado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="weightsTableBody" class="divide-y divide-slate-800 text-slate-300">
+                                <!-- Filas dinámicas -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="bg-slate-800/40 border border-slate-700/40 rounded-2xl p-6 shadow-xl">
+                    <h3 class="text-md font-semibold text-white mb-1 flex items-center gap-2">
+                        🔥 Matriz de Correlación de Retornos
+                    </h3>
+                    <p class="text-xs text-slate-400 mb-4">Mide el co-movimiento entre tus activos para evaluar el grado de diversificación.</p>
+                    <div id="chartCorr" class="w-full h-[320px]"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="border-t border-slate-800/60 bg-slate-950/40 py-8 text-center text-xs text-slate-500">
+        <p>© 2026 QuantumPort. Desarrollado con Python Serverless en Netlify & Plotly.js.</p>
+        <p class="mt-1">Garantiza precisión académica bajo la Teoría Moderna de Portafolios y CAPM.</p>
+    </footer>
+
+    <script>
+        document.getElementById('configForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const loading = document.getElementById('loadingIndicator');
+            const dashboard = document.getElementById('resultsDashboard');
+            const errorAlert = document.getElementById('errorAlert');
+            const btn = document.getElementById('btnCalcular');
+
+            loading.classList.remove('hidden');
+            dashboard.classList.add('hidden');
+            errorAlert.classList.add('hidden');
+            btn.disabled = true;
+            btn.classList.add('opacity-50');
+
+            const payload = {
+                tickers: document.getElementById('tickersInput').value,
+                benchmark: document.getElementById('benchmarkInput').value,
+                period: document.getElementById('periodInput').value
+            };
+
+            try {
+                // Reemplaza esta URL con la de tu servidor de Render en producción, por ejemplo:
+                // const response = await fetch('https://tu-api.onrender.com/optimizar', {
+                const response = await fetch('https://api-analisis-y-optimizacion-portafolio.onrender.com/optimizar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    let errorMsg = 'Ocurrió un error en la optimización.';
+                    try {
+                        const errData = await response.json();
+                        if (errData) {
+                            if (errData.detail) {
+                                if (typeof errData.detail === 'string') {
+                                    errorMsg = errData.detail;
+                                } else if (errData.detail.error) {
+                                    errorMsg = errData.detail.error;
+                                } else if (errData.detail.detail) {
+                                    errorMsg = errData.detail.detail;
+                                } else {
+                                    errorMsg = JSON.stringify(errData.detail);
+                                }
+                            } else if (errData.error) {
+                                errorMsg = errData.error;
+                            }
+                        }
+                    } catch (jsonErr) {
+                        errorMsg = `Error de servidor o conexión (Status: ${response.status}).`;
+                    }
+                    throw new Error(errorMsg);
+                }
+
+                const data = await response.json();
+                renderDashboard(data);
+                dashboard.classList.remove('hidden');
+            } catch (err) {
+                console.error(err);
+                document.getElementById('errorMessage').innerText = err.message || 'Error de red o de servidor.';
+                errorAlert.classList.remove('hidden');
+            } finally {
+                loading.classList.add('hidden');
+                btn.disabled = false;
+                btn.classList.remove('opacity-50');
+            }
+        });
+
+        function renderDashboard(data) {
+            document.getElementById('rfValue').innerText = (data.rf_rate * 100).toFixed(2) + ' %';
+            document.getElementById('proSharpe').innerText = data.pro.sharpe.toFixed(2);
+            document.getElementById('proStats').innerText = `Retorno: ${(data.pro.retorno * 100).toFixed(1)}% | Vol: ${(data.pro.volatilidad * 100).toFixed(1)}%`;
+            document.getElementById('mvgVol').innerText = (data.mvg.volatilidad * 100).toFixed(1) + ' %';
+            document.getElementById('mvgStats').innerText = `Retorno: ${(data.mvg.retorno * 100).toFixed(1)}% | Sharpe: ${data.mvg.sharpe.toFixed(2)}`;
+
+            const tbody = document.getElementById('weightsTableBody');
+            tbody.innerHTML = '';
+            data.activos.forEach(asset => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-800/40 transition duration-150 border-b border-slate-800/50';
+                const wPro = ((data.pro.pesos[asset.ticker] || 0) * 100).toFixed(1) + '%';
+                const wMvg = ((data.mvg.pesos[asset.ticker] || 0) * 100).toFixed(1) + '%';
+
+                tr.innerHTML = `
+                    <td class="py-3 px-4 font-bold text-white">${asset.ticker}</td>
+                    <td class="py-3 px-4 font-semibold text-emerald-400">${wPro}</td>
+                    <td class="py-3 px-4 font-semibold text-blue-400">${wMvg}</td>
+                    <td class="py-3 px-4">${asset.beta.toFixed(2)}</td>
+                    <td class="py-3 px-4">${(asset.retorno * 100).toFixed(1)}%</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            const xFrontera = data.frontera_eficiente.map(p => p.volatilidad * 100);
+            const yFrontera = data.frontera_eficiente.map(p => p.retorno * 100);
+
+            const traceFrontera = {
+                x: xFrontera, y: yFrontera, mode: 'lines', name: 'Frontera Eficiente',
+                line: { color: '#ffffff', width: 2.5 }
+            };
+
+            const tracePRO = {
+                x: [data.pro.volatilidad * 100], y: [data.pro.retorno * 100], mode: 'markers', name: 'PRO (Max Sharpe)',
+                marker: { color: '#10B981', size: 14, symbol: 'star' }
+            };
+
+            const traceMVG = {
+                x: [data.mvg.volatilidad * 100], y: [data.mvg.retorno * 100], mode: 'markers', name: 'MVG (Min Varianza)',
+                marker: { color: '#3B82F6', size: 14, symbol: 'star' }
+            };
+
+            const xCML = [0, data.pro.volatilidad * 100 * 1.5];
+            const yCML = [data.rf_rate * 100, data.rf_rate * 100 + data.pro.sharpe * (data.pro.volatilidad * 100 * 1.5)];
+            const traceCML = {
+                x: xCML, y: yCML, mode: 'lines', name: 'CAL (Línea Capitales)',
+                line: { color: '#10B981', dash: 'dash', width: 1.5 }
+            };
+
+            const traceIndividuales = {
+                x: data.activos.map(a => a.volatilidad * 100), y: data.activos.map(a => a.retorno * 100),
+                mode: 'markers+text', name: 'Activos', text: data.activos.map(a => a.ticker),
+                textposition: 'top center', marker: { color: '#F59E0B', size: 9 }, textfont: { color: '#cbd5e1' }
+            };
+
+            Plotly.newPlot('chartFrontera', [traceFrontera, traceCML, tracePRO, traceMVG, traceIndividuales], {
+                paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+                xaxis: { title: 'Volatilidad Anualizada (%)', gridcolor: '#334155', color: '#cbd5e1' },
+                yaxis: { title: 'Retorno Esperado Anual (%)', gridcolor: '#334155', color: '#cbd5e1' },
+                margin: { l: 50, r: 20, t: 30, b: 50 }, legend: { font: { color: '#94a3b8' }, orientation: 'h', y: -0.2 }
+            });
+
+            const betaMax = Math.max(...data.activos.map(a => a.beta), 1.5) * 1.2;
+            const xSML = [0, betaMax];
+            const ySML = [data.rf_rate * 100, data.rf_rate * 100 + betaMax * (data.benchmark.retorno * 100 - data.rf_rate * 100)];
+
+            const traceSML_line = {
+                x: xSML, y: ySML, mode: 'lines', name: 'SML (CAPM Line)', line: { color: '#10B981', width: 2 }
+            };
+
+            const traceBenchmark = {
+                x: [1.0], y: [data.benchmark.retorno * 100], mode: 'markers+text', name: 'Benchmark (S&P 500)',
+                text: [data.benchmark.ticker], textposition: 'top right', marker: { color: '#EF4444', size: 12, symbol: 'cross' }
+            };
+
+            const tracePRO_SML = {
+                x: [data.pro.beta], y: [data.pro.retorno * 100], mode: 'markers', name: 'PRO (Max Sharpe)',
+                marker: { color: '#10B981', size: 14, symbol: 'star' }
+            };
+
+            const traceMVG_SML = {
+                x: [data.mvg.beta], y: [data.mvg.retorno * 100], mode: 'markers', name: 'MVG (Min Varianza)',
+                marker: { color: '#3B82F6', size: 14, symbol: 'star' }
+            };
+
+            const traceActivos_SML = {
+                x: data.activos.map(a => a.beta), y: data.activos.map(a => a.retorno * 100),
+                mode: 'markers+text', name: 'Activos', text: data.activos.map(a => a.ticker),
+                textposition: 'top center', marker: { color: '#F59E0B', size: 9 }, textfont: { color: '#cbd5e1' }
+            };
+
+            Plotly.newPlot('chartSML', [traceSML_line, traceBenchmark, tracePRO_SML, traceMVG_SML, traceActivos_SML], {
+                paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+                xaxis: { title: 'Riesgo Sistemático (Beta)', gridcolor: '#334155', color: '#cbd5e1' },
+                yaxis: { title: 'Retorno Esperado Anual (%)', gridcolor: '#334155', color: '#cbd5e1' },
+                margin: { l: 50, r: 20, t: 30, b: 50 }, legend: { font: { color: '#94a3b8' }, orientation: 'h', y: -0.2 }
+            });
+
+            Plotly.newPlot('chartCorr', [{
+                z: data.correlaciones.matrix, x: data.correlaciones.tickers, y: data.correlaciones.tickers,
+                type: 'heatmap', colorscale: 'RdBu', reversescale: true, zmin: -1, zmax: 1,
+                colorbar: { tickcolor: '#cbd5e1', title: { text: 'Corr', font: { color: '#cbd5e1' } } }
+            }], {
+                paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+                xaxis: { color: '#cbd5e1' }, yaxis: { color: '#cbd5e1' }, margin: { l: 50, r: 20, t: 20, b: 50 }
+            });
+        }
+    </script>
+</body>
+</html>
