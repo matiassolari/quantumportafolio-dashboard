@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuantumPort - Optimización de Portafolios de Inversión Avanzada</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+    <style>
+        .loader {
+            border-top-color: #10B981;
+            -webkit-animation: spinner 1.5s linear infinite;
+            animation: spinner 1.5s linear infinite;
+        }
+        @-webkit-keyframes spinner {
+            0% { -webkit-transform: rotate(0deg); }
+            100% { -webkit-transform: rotate(360deg); }
+        }
+        @keyframes spinner {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen font-sans">
+
+    <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <span class="text-emerald-500 text-3xl font-bold">📊</span>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight text-white">QuantumPort</h1>
+                    <p class="text-xs text-slate-400">Teoría de Portafolios Markowitz & CAPM-POPI de Grado Profesional</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="inline-flex items-center rounded-full bg-indigo-500/10 px-2.5 py-0.5 text-xs font-medium text-indigo-400 ring-1 ring-inset ring-indigo-500/20">
+                    SML-POPI Model
+                </span>
+                <span class="inline-flex items-center rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-400 ring-1 ring-inset ring-emerald-500/20">
+                    FastAPI Backend
+                </span>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8">
+        <!-- Panel de Configuración -->
+        <section class="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 mb-8 backdrop-blur shadow-xl">
+            <h2 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                ⚙️ Configuración del Pipeline de Optimización
+            </h2>
+            <form id="configForm" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+                <!-- Tickers -->
+                <div class="lg:col-span-1">
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Activos (Tickers)</label>
+                    <input type="text" id="tickersInput" value="AAPL, MSFT, GOOGL, AMZN" 
+                           class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition">
+                    <span class="text-[10px] text-slate-500 mt-1 block">Separados por comas</span>
+                </div>
+                <!-- Benchmark -->
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Benchmark de Mercado</label>
+                    <input type="text" id="benchmarkInput" value="SPY" 
+                           class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition">
+                    <span class="text-[10px] text-slate-500 mt-1 block">Riesgo de Mercado (CAPM)</span>
+                </div>
+                <!-- Periodo -->
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Periodo Histórico</label>
+                    <select id="periodInput" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition">
+                        <option value="1y">1 Año</option>
+                        <option value="3y" selected>3 Años</option>
+                        <option value="5y">5 Años</option>
+                        <option value="10y">10 Años</option>
+                        <option value="15y">15 Años</option>
+                        <option value="20y">20 Años</option>
+                        <option value="25y">25 Años</option>
+                    </select>
+                    <span class="text-[10px] text-slate-500 mt-1 block">Horizonte de datos de mercado</span>
+                </div>
+                <!-- Asignación Mínima -->
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Asignación Mínima (w_min)</label>
+                    <select id="minWeightInput" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition">
+                        <option value="0.0" selected>0% (Sin restricción)</option>
+                        <option value="0.02">2% mínimo por activo</option>
+                        <option value="0.05">5% mínimo por activo</option>
+                        <option value="0.10">10% mínimo por activo</option>
+                        <option value="0.15">15% mínimo por activo</option>
+                    </select>
+                    <span class="text-[10px] text-slate-500 mt-1 block">Obliga diversificación del solver</span>
+                </div>
+                <!-- Aversión al Riesgo (A) -->
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Aversión al Riesgo (A)</label>
+                    <div class="flex items-center gap-3 bg-slate-950 border border-slate-700 rounded-xl px-4 py-2">
+                        <input type="range" id="riskAversionInput" min="1" max="10" step="0.5" value="3.0" 
+                               class="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500">
+                        <span id="riskAversionValue" class="text-sm font-bold text-emerald-400">3.0</span>
+                    </div>
+                    <span class="text-[10px] text-slate-500 mt-1 block">1: Muy Agresivo | 10: Muy Conservador</span>
+                </div>
+                
+                <!-- Botón de Envío -->
+                <div class="md:col-span-2 lg:col-span-5 flex justify-end">
+                    <button type="submit" id="btnCalcular" 
+                            class="w-full md:w-auto bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 px-8 rounded-xl transition duration-150 transform hover:scale-[1.01] active:scale-[0.99] shadow-lg shadow-emerald-900/20 flex items-center justify-center gap-2">
+                        🚀 Calcular Optimización
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <!-- Indicador de Carga -->
+        <div id="loadingIndicator" class="hidden flex flex-col items-center justify-center py-16 gap-4">
+            <div class="loader ease-linear rounded-full border-4 border-t-4 border-slate-800 h-14 w-14"></div>
+            <p class="text-sm text-slate-400 font-medium animate-pulse text-center max-w-md">
+                Conectando con la API de Python, descargando precios históricos (hasta 25 años) y resolviendo matrices de covarianza...
+            </p>
+        </div>
+
+        <!-- Alerta de Error -->
+        <div id="errorAlert" class="hidden bg-red-900/20 border border-red-500/30 rounded-xl p-4 mb-8 text-red-300 text-sm flex items-center gap-3">
+            <span class="text-lg">⚠️</span>
+            <span id="errorMessage"></span>
+        </div>
+
+        <!-- Dashboard de Resultados -->
+        <div id="resultsDashboard" class="hidden space-y-8">
+            <!-- Fila de Tarjetas de Resumen (4 Columnas) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <!-- Risk-Free Rate -->
+                <div class="bg-slate-800/30 border border-slate-700/30 rounded-2xl p-5 flex items-center justify-between shadow-lg">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Risk-Free Rate (10Y US Treasury)</p>
+                        <h3 class="text-2xl font-bold text-white" id="rfValue">- %</h3>
+                        <p class="text-[10px] text-slate-500 mt-1">Rentabilidad libre de riesgo dinámica (^TNX)</p>
+                    </div>
+                    <span class="text-3xl">🛡️</span>
+                </div>
+                <!-- POPI (Portafolio Óptimo Inversor) -->
+                <div class="bg-gradient-to-br from-indigo-950/25 to-slate-800/30 border border-indigo-500/30 rounded-2xl p-5 flex items-center justify-between shadow-lg ring-2 ring-indigo-500/20">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-indigo-400 mb-1">POPI (Óptimo del Inversor)</p>
+                        <h3 class="text-2xl font-bold text-indigo-400" id="popiAllocation">-</h3>
+                        <p class="text-[10px] text-slate-400 mt-1" id="popiStats">Retorno: - | Volatilidad: -</p>
+                    </div>
+                    <span class="text-3xl text-indigo-400">🧠</span>
+                </div>
+                <!-- PRO (Max Sharpe) -->
+                <div class="bg-gradient-to-br from-emerald-950/20 to-slate-800/30 border border-emerald-500/20 rounded-2xl p-5 flex items-center justify-between shadow-lg">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-emerald-400 mb-1">PRO (Max Sharpe Risgoso)</p>
+                        <h3 class="text-2xl font-bold text-emerald-400" id="proSharpe">-</h3>
+                        <p class="text-[10px] text-slate-400 mt-1" id="proStats">Retorno: - | Volatilidad: -</p>
+                    </div>
+                    <span class="text-3xl text-emerald-400">⭐</span>
+                </div>
+                <!-- MVG (Min Varianza) -->
+                <div class="bg-gradient-to-br from-blue-950/20 to-slate-800/30 border border-blue-500/20 rounded-2xl p-5 flex items-center justify-between shadow-lg">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-blue-400 mb-1">MVG (Mínima Varianza)</p>
+                        <h3 class="text-2xl font-bold text-blue-400" id="mvgVol">- %</h3>
+                        <p class="text-[10px] text-slate-400 mt-1" id="mvgStats">Retorno: - | Sharpe: -</p>
+                    </div>
+                    <span class="text-3xl text-blue-400">⚙️</span>
+                </div>
+            </div>
+
+            <!-- Gráficos Principales -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <!-- Gráfico de la Frontera Eficiente -->
+                <div class="bg-slate-800/40 border border-slate-700/40 rounded-2xl p-6 shadow-xl flex flex-col min-h-[480px]">
+                    <h3 class="text-md font-semibold text-white mb-1 flex items-center gap-2">
+                        📈 Frontera Eficiente & CAL (Línea de Capitales)
+                    </h3>
+                    <p class="text-xs text-slate-400 mb-4">Relación rentabilidad/riesgo. El POPI muestra la mezcla recomendada según tu aversión al riesgo.</p>
+                    <div id="chartFrontera" class="w-full flex-1 min-h-[380px]"></div>
+                </div>
+
+                <!-- Gráfico de la SML / CAPM -->
+                <div class="bg-slate-800/40 border border-slate-700/40 rounded-2xl p-6 shadow-xl flex flex-col min-h-[480px]">
+                    <h3 class="text-md font-semibold text-white mb-1 flex items-center gap-2">
+                        📊 Security Market Line (SML) / CAPM
+                    </h3>
+                    <p class="text-xs text-slate-400 mb-4">Muestra si los activos rinden de acuerdo con su riesgo sistemático (Beta). El POPI se ubica sobre la línea.</p>
+                    <div id="chartSML" class="w-full flex-1 min-h-[380px]"></div>
+                </div>
+            </div>
+
+            <!-- Tabla de Pesos y Matriz de Correlación -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <!-- Tabla de Pesos Comparativos -->
+                <div class="bg-slate-800/40 border border-slate-700/40 rounded-2xl p-6 shadow-xl">
+                    <h3 class="text-md font-semibold text-white mb-2 flex items-center gap-2">
+                        ⚖️ Asignación de Capital Comparativa (PRO, MVG, POPI)
+                    </h3>
+                    <p class="text-xs text-slate-400 mb-4">
+                        Compara la estructura de cada cartera. El POPI puede incluir una asignación a "Activo Libre de Riesgo" (Cash) según tu perfil.
+                    </p>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-slate-700 text-left text-sm">
+                            <thead>
+                                <tr class="text-slate-400 uppercase text-xs font-semibold tracking-wider">
+                                    <th class="py-3 px-4">Activo / Ticker</th>
+                                    <th class="py-3 px-4 text-emerald-400">PRO (Max Sharpe)</th>
+                                    <th class="py-3 px-4 text-blue-400">MVG (Min Var)</th>
+                                    <th class="py-3 px-4 text-indigo-400">POPI (Ajustado)</th>
+                                    <th class="py-3 px-4">Beta</th>
+                                    <th class="py-3 px-4">Retorno Esperado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="weightsTableBody" class="divide-y divide-slate-800 text-slate-300">
+                                <!-- Filas dinámicas -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Matriz de Correlación -->
+                <div class="bg-slate-800/40 border border-slate-700/40 rounded-2xl p-6 shadow-xl flex flex-col min-h-[420px]">
+                    <h3 class="text-md font-semibold text-white mb-1 flex items-center gap-2">
+                        🔥 Matriz de Correlación de Retornos (Valores Integrados)
+                    </h3>
+                    <p class="text-xs text-slate-400 mb-4">Coeficientes numéricos para verificar la robustez de la diversificación matemática.</p>
+                    <div id="chartCorr" class="w-full flex-1 min-h-[320px]"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="border-t border-slate-800/60 bg-slate-950/40 py-8 text-center text-xs text-slate-500">
+        <p>© 2026 QuantumPort. Desarrollado con Arquitectura Desacoplada: Frontend Jamstack + Python API en Render.</p>
+        <p class="mt-1">Garantiza precisión académica bajo la Teoría Moderna de Portafolios y CAPM.</p>
+    </footer>
+
+    <script>
+        // Actualizar el valor del slider de aversión al riesgo en tiempo real
+        const aversionInput = document.getElementById('riskAversionInput');
+        const aversionVal = document.getElementById('riskAversionValue');
+        aversionInput.addEventListener('input', function() {
+            aversionVal.innerText = parseFloat(aversionInput.value).toFixed(1);
+        });
+
+        document.getElementById('configForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const loading = document.getElementById('loadingIndicator');
+            const dashboard = document.getElementById('resultsDashboard');
+            const errorAlert = document.getElementById('errorAlert');
+            const btn = document.getElementById('btnCalcular');
+
+            loading.classList.remove('hidden');
+            dashboard.classList.add('hidden');
+            errorAlert.classList.add('hidden');
+            btn.disabled = true;
+            btn.classList.add('opacity-50');
+
+            // Sanear los Tickers removiendo absolutamente cualquier espacio en blanco
+            const rawTickers = document.getElementById('tickersInput').value;
+            const cleanTickers = rawTickers.replace(/\s+/g, '').toUpperCase();
+            
+            const payload = {
+                tickers: cleanTickers,
+                benchmark: document.getElementById('benchmarkInput').value.trim().toUpperCase(),
+                period: document.getElementById('periodInput').value,
+                min_weight: parseFloat(document.getElementById('minWeightInput').value),
+                risk_aversion: parseFloat(document.getElementById('riskAversionInput').value)
+            };
+
+            // Validar de forma preventiva que no superen el 100% de la inversión mínima
+            const arrTickers = cleanTickers.split(',').filter(t => t.length > 0);
+            if (payload.min_weight * arrTickers.length >= 1.0) {
+                loading.classList.add('hidden');
+                btn.disabled = false;
+                btn.classList.remove('opacity-50');
+                document.getElementById('errorMessage').innerText = `Error de asignación: w_min (${payload.min_weight * 100}%) multiplicado por el número de activos (${arrTickers.length}) supera el 100%. Elija una asignación mínima menor.`;
+                errorAlert.classList.remove('hidden');
+                return;
+            }
+
+            try {
+                // LLAMADA EN VIVO A LA API DE RENDER
+                const response = await fetch('https://api-analisis-y-optimizacion-portafolio.onrender.com/optimizar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errData = await response.json();
+                    throw new Error(errData.detail || 'Ocurrió un error en la optimización.');
+                }
+
+                const data = await response.json();
+                renderDashboard(data);
+                dashboard.classList.remove('hidden');
+            } catch (err) {
+                console.error(err);
+                document.getElementById('errorMessage').innerText = err.message || 'Error de servidor o conexión al API de Render.';
+                errorAlert.classList.remove('hidden');
+            } finally {
+                loading.classList.add('hidden');
+                btn.disabled = false;
+                btn.classList.remove('opacity-50');
+            }
+        });
+
+        function renderDashboard(data) {
+            // 1. Renderizar Tarjetas de Resumen
+            document.getElementById('rfValue').innerText = (data.rf_rate * 100).toFixed(2) + ' %';
+            
+            const yRiesgoso = data.popi.y_riesgoso * 100;
+            const wCash = data.popi.w_cash * 100;
+            document.getElementById('popiAllocation').innerText = `${yRiesgoso.toFixed(0)}% Act / ${wCash.toFixed(0)}% Bono`;
+            document.getElementById('popiStats').innerText = `Retorno: ${(data.popi.retorno * 100).toFixed(1)}% | Volatilidad: ${(data.popi.volatilidad * 100).toFixed(1)}%`;
+
+            document.getElementById('proSharpe').innerText = data.pro.sharpe.toFixed(2);
+            document.getElementById('proStats').innerText = `Retorno: ${(data.pro.retorno * 100).toFixed(1)}% | Vol: ${(data.pro.volatilidad * 100).toFixed(1)}%`;
+            
+            document.getElementById('mvgVol').innerText = (data.mvg.volatilidad * 100).toFixed(1) + ' %';
+            document.getElementById('mvgStats').innerText = `Retorno: ${(data.mvg.retorno * 100).toFixed(1)}% | Sharpe: ${data.mvg.sharpe.toFixed(2)}`;
+
+            // 2. Renderizar Tabla Comparativa
+            const tbody = document.getElementById('weightsTableBody');
+            tbody.innerHTML = '';
+            
+            data.activos.forEach(asset => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-800/40 transition duration-150 border-b border-slate-800/50';
+                
+                const wPro = ((data.pro.pesos[asset.ticker] || 0) * 100).toFixed(1) + '%';
+                const wMvg = ((data.mvg.pesos[asset.ticker] || 0) * 100).toFixed(1) + '%';
+                const wPopi = ((data.popi.pesos_activos[asset.ticker] || 0) * 100).toFixed(1) + '%';
+
+                tr.innerHTML = `
+                    <td class="py-3 px-4 font-bold text-white">${asset.ticker}</td>
+                    <td class="py-3 px-4 font-semibold text-emerald-400">${wPro}</td>
+                    <td class="py-3 px-4 font-semibold text-blue-400">${wMvg}</td>
+                    <td class="py-3 px-4 font-semibold text-indigo-400">${wPopi}</td>
+                    <td class="py-3 px-4">${asset.beta.toFixed(2)}</td>
+                    <td class="py-3 px-4">${(asset.retorno * 100).toFixed(1)}%</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // Añadir fila del activo libre de riesgo si existe asignación en POPI
+            if (data.popi.w_cash > 0.001) {
+                const trCash = document.createElement('tr');
+                trCash.className = 'hover:bg-slate-800/40 transition duration-150 border-b border-slate-800/50 bg-indigo-950/10';
+                trCash.innerHTML = `
+                    <td class="py-3 px-4 font-bold text-indigo-300">Activo Libre de Riesgo (Bono)</td>
+                    <td class="py-3 px-4 text-slate-500">0.0%</td>
+                    <td class="py-3 px-4 text-slate-500">0.0%</td>
+                    <td class="py-3 px-4 font-bold text-indigo-400">${(data.popi.w_cash * 100).toFixed(1)}%</td>
+                    <td class="py-3 px-4">0.00</td>
+                    <td class="py-3 px-4">${(data.rf_rate * 100).toFixed(2)}%</td>
+                `;
+                tbody.appendChild(trCash);
+            }
+
+            // 3. Renderizar Gráfico de Frontera Eficiente (Markowitz & CAL)
+            const xFrontera = data.frontera_eficiente.map(p => p.volatilidad * 100);
+            const yFrontera = data.frontera_eficiente.map(p => p.retorno * 100);
+
+            const traceFrontera = {
+                x: xFrontera, y: yFrontera, mode: 'lines', name: 'Frontera Eficiente',
+                line: { color: '#64748b', width: 2.5 }
+            };
+
+            const tracePRO = {
+                x: [data.pro.volatilidad * 100], y: [data.pro.retorno * 100], mode: 'markers', name: 'PRO (Max Sharpe)',
+                marker: { color: '#10B981', size: 12, symbol: 'star' }
+            };
+
+            const traceMVG = {
+                x: [data.mvg.volatilidad * 100], y: [data.mvg.retorno * 100], mode: 'markers', name: 'MVG (Min Varianza)',
+                marker: { color: '#3B82F6', size: 12, symbol: 'square' }
+            };
+
+            // POPI
+            const tracePOPI = {
+                x: [data.popi.volatilidad * 100], y: [data.popi.retorno * 100], mode: 'markers', name: 'POPI (Óptimo Inversor)',
+                marker: { color: '#818CF8', size: 15, symbol: 'diamond', line: { color: '#ffffff', width: 1.5 } }
+            };
+
+            // Línea de Capitales (CAL)
+            const xMaxCAL = data.pro.volatilidad * 100 * 1.4;
+            const yMaxCAL = data.rf_rate * 100 + data.pro.sharpe * xMaxCAL;
+            const traceCAL = {
+                x: [0, xMaxCAL], y: [data.rf_rate * 100, yMaxCAL], mode: 'lines', name: 'CAL (Línea Capitales)',
+                line: { color: '#10B981', dash: 'dash', width: 1.5 }
+            };
+
+            // Activos Individuales
+            const traceIndividuales = {
+                x: data.activos.map(a => a.volatilidad * 100), y: data.activos.map(a => a.retorno * 100),
+                mode: 'markers+text', name: 'Activos Individuales', text: data.activos.map(a => a.ticker),
+                textposition: 'top center', marker: { color: '#F59E0B', size: 8 }, textfont: { color: '#cbd5e1', size: 10 }
+            };
+
+            Plotly.newPlot('chartFrontera', [traceFrontera, traceCAL, tracePRO, traceMVG, tracePOPI, traceIndividuales], {
+                paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+                xaxis: { title: 'Volatilidad Anualizada (%)', gridcolor: '#334155', color: '#cbd5e1' },
+                yaxis: { title: 'Retorno Esperado Anual (%)', gridcolor: '#334155', color: '#cbd5e1' },
+                margin: { l: 45, r: 15, t: 15, b: 40 }, 
+                legend: { font: { color: '#cbd5e1', size: 10 }, orientation: 'h', y: -0.15 },
+                autosize: true
+            }, { responsive: true, displayModeBar: false });
+
+            // 4. Renderizar Gráfico de la Security Market Line (SML) / CAPM
+            const betaMax = Math.max(...data.activos.map(a => a.beta), 1.5) * 1.25;
+            const xSML = [0, betaMax];
+            const ySML = [data.rf_rate * 100, data.rf_rate * 100 + betaMax * (data.benchmark.retorno * 100 - data.rf_rate * 100)];
+
+            const traceSML_line = {
+                x: xSML, y: ySML, mode: 'lines', name: 'SML (CAPM Line)', line: { color: '#10B981', width: 2 }
+            };
+
+            const traceBenchmark = {
+                x: [1.0], y: [data.benchmark.retorno * 100], mode: 'markers+text', name: 'Benchmark',
+                text: [data.benchmark.ticker], textposition: 'top right', marker: { color: '#EF4444', size: 12, symbol: 'cross' },
+                textfont: { color: '#ef4444', size: 10 }
+            };
+
+            const tracePRO_SML = {
+                x: [data.pro.beta], y: [data.pro.retorno * 100], mode: 'markers', name: 'PRO (Max Sharpe)',
+                marker: { color: '#10B981', size: 12, symbol: 'star' }
+            };
+
+            const traceMVG_SML = {
+                x: [data.mvg.beta], y: [data.mvg.retorno * 100], mode: 'markers', name: 'MVG (Min Varianza)',
+                marker: { color: '#3B82F6', size: 12, symbol: 'square' }
+            };
+
+            const tracePOPI_SML = {
+                x: [data.popi.beta], y: [data.popi.retorno * 100], mode: 'markers', name: 'POPI (Óptimo Inversor)',
+                marker: { color: '#818CF8', size: 15, symbol: 'diamond', line: { color: '#ffffff', width: 1.5 } }
+            };
+
+            const traceActivos_SML = {
+                x: data.activos.map(a => a.beta), y: data.activos.map(a => a.retorno * 100),
+                mode: 'markers+text', name: 'Activos Individuales', text: data.activos.map(a => a.ticker),
+                textposition: 'top center', marker: { color: '#F59E0B', size: 8 }, textfont: { color: '#cbd5e1', size: 10 }
+            };
+
+            Plotly.newPlot('chartSML', [traceSML_line, traceBenchmark, tracePRO_SML, traceMVG_SML, tracePOPI_SML, traceActivos_SML], {
+                paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+                xaxis: { title: 'Riesgo Sistemático (Beta)', gridcolor: '#334155', color: '#cbd5e1' },
+                yaxis: { title: 'Retorno Esperado Anual (%)', gridcolor: '#334155', color: '#cbd5e1' },
+                margin: { l: 45, r: 15, t: 15, b: 40 }, 
+                legend: { font: { color: '#cbd5e1', size: 10 }, orientation: 'h', y: -0.15 },
+                autosize: true
+            }, { responsive: true, displayModeBar: false });
+
+            // 5. Renderizar Matriz de Correlación con Números Integrados
+            const tickers = data.correlaciones.tickers;
+            const matrix = data.correlaciones.matrix;
+
+            // Construir anotaciones de texto centrado para cada cuadro de correlación
+            let annotations = [];
+            for (let i = 0; i < tickers.length; i++) {
+                for (let j = 0; j < tickers.length; j++) {
+                    let val = matrix[i][j];
+                    annotations.push({
+                        x: tickers[j],
+                        y: tickers[i],
+                        text: val.toFixed(2),
+                        font: { color: Math.abs(val) > 0.4 ? 'white' : '#cbd5e1', size: 11, weight: 'bold' },
+                        showarrow: false
+                    });
+                }
+            }
+
+            Plotly.newPlot('chartCorr', [{
+                z: matrix, x: tickers, y: tickers,
+                type: 'heatmap', colorscale: 'RdBu', reversescale: true, zmin: -1, zmax: 1,
+                colorbar: { tickcolor: '#cbd5e1', title: { text: 'Corr', font: { color: '#cbd5e1', size: 10 } } }
+            }], {
+                paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+                xaxis: { color: '#cbd5e1', tickfont: { size: 10 } }, 
+                yaxis: { color: '#cbd5e1', tickfont: { size: 10 } }, 
+                margin: { l: 50, r: 15, t: 15, b: 40 },
+                annotations: annotations,
+                autosize: true
+            }, { responsive: true, displayModeBar: false });
+        }
+    </script>
+</body>
+</html>
